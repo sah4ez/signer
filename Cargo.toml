@@ -1,0 +1,10 @@
+[package]
+name = "signer"
+version = "0.1.0"
+authors = ["Alexandr Kozlenkov <sah4ez32@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+clap = "~2.32"
+rust-crypto = "^0.2"
+rand = "0.4.0"
