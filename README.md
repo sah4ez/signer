@@ -1,3 +1,3 @@
 ## About
 
-Simple signer or encrypter anything data.
+Simple a signer or an encryptor anything data.
