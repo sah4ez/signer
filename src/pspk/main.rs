@@ -9,13 +9,14 @@ extern crate hex;
 
 
 use rocket::State;
+use rocket::response::{status};
 use base64::{decode, encode};
 use hex::{decode as hdecode};
 use rocket_contrib::json::Json;
 use mongodb::{Bson, bson, doc};
 use mongodb::{Client, ThreadedClient};
 use mongodb::db::ThreadedDatabase;
-use mongodb::coll::Collection;
+use mongodb::coll::{Collection, options::IndexOptions as Opt};
 use mongodb::spec::BinarySubtype;
 use std::prelude::v1::Vec;
 
@@ -25,7 +26,8 @@ struct Key {
 }
 
 #[post("/<key>", format = "application/json", data = "<value>")]
-fn add(key: String, value: Json<Key>, current_store: State<Collection>) {
+fn add(key: String, value: Json<Key>, current_store: State<Collection>)
+    -> Result<status::Accepted<String>, status::BadRequest<String>> {
     let b = match decode(&value.0.key) {
         Ok(bb) => bb.to_vec(),
         _ => [0; 32].to_vec(),
@@ -33,7 +35,23 @@ fn add(key: String, value: Json<Key>, current_store: State<Collection>) {
 
     if b != [0;32].to_vec() && b.len() == 32 {
         let k = Bson::Binary(BinarySubtype::Generic, Vec::from(b.as_slice()));
-        current_store.insert_one(doc!{"key":key, "value": k }, None).unwrap();
+        match current_store.insert_one(doc!{"key":key, "value": k }, None){
+            Ok(v) => {
+                match v.write_exception {
+                    Some(v) => {
+                        Err(status::BadRequest(Some(v.write_error.unwrap().message)))
+                    },
+                    None => {
+                        Ok(status::Accepted(Some("".to_string())))
+                    },
+                }
+            },
+            Err(e) => {
+                Err(status::BadRequest(Some(e.to_string())))
+            },
+        }
+    } else {
+        Err(status::BadRequest(Some(String::from("invalid length"))))
     }
 }
 
@@ -62,7 +80,28 @@ fn main() {
     let client = Client::with_uri("mongodb://localhost:27017")
         .expect("Failed to initialize standalone client.");
 
-    let coll = client.db("pspk)").collection("keys");
+    let coll = client.db("pspk").collection("keys");
+
+    coll.create_index(doc!{
+        "key" => "text",
+    }, Some(Opt{
+        background: Some(true),
+        expire_after_seconds: None,
+        name: Some("key_unique_1".parse().unwrap()),
+        sparse: None,
+        storage_engine: None,
+        unique: Some(true),
+        version: None,
+        default_language: None,
+        language_override: None,
+        text_version: None,
+        weights: None,
+        sphere_version: None,
+        bits: None,
+        max: None,
+        min: None,
+        bucket_size: None
+    })).unwrap();
 
     rocket::ignite()
         .manage(coll)
